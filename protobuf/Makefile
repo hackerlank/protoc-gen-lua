@@ -8,3 +8,6 @@ all:$(TARGET)
 
 $(TARGET):$(SRC)
 	gcc -O3 -shared -fPIC $(SRC) $(CFLAGS) $(LDFLAGS) -o $@
+
+clean:
+	rm -rf pb.so

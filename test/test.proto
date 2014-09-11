@@ -1,12 +1,27 @@
-message TestInt64
+message MsgInt64 
 {
-   required int64 id1 = 1;
-   required uint64 id2 = 2;
-   required sint64 id3 = 3;
-   required fixed64 id4 = 4;
-   required sfixed64 id5 = 5;
+   required int64 id = 1;
 }
 
+message MsgUInt64
+{
+   required uint64 id = 1;
+}
+
+message MsgSInt64
+{
+    required sint64 id = 1;
+}
+
+message MsgFixed64
+{
+    required fixed64 id = 1;
+}
+
+message MsgSFixed64
+{
+    required sfixed64 id = 1;
+}
 message LoginGame_C2S_Msg
 {
     required string token = 1;

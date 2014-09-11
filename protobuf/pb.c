@@ -21,6 +21,8 @@
  */
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#include <inttypes.h>
 
 #include <lua.h>
 #include <lualib.h>
@@ -113,6 +115,22 @@ static int varint_encoder(lua_State *L)
     lua_call(L, 1, 0);
     return 0;
 }
+static int varint_encoder64(lua_State *L)
+{
+    const char* l_value = luaL_checkstring(L, 2);
+    uint64_t value = atoll(l_value);
+
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    
+    pack_varint(&b, value);
+
+    lua_settop(L, 1);
+    luaL_pushresult(&b);
+    lua_call(L, 1, 0);
+    return 0;
+}
+
 
 static int signed_varint_encoder(lua_State *L)
 {
@@ -134,6 +152,28 @@ static int signed_varint_encoder(lua_State *L)
     lua_call(L, 1, 0);
     return 0;
 }
+
+static int signed_varint_encoder64(lua_State *L)
+{
+    const char* l_value = luaL_checkstring(L, 2);
+    uint64_t value = atoll(l_value);
+    
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+
+    if (value < 0)
+    {
+        pack_varint(&b, *(uint64_t*)&value);
+    }else{
+        pack_varint(&b, value);
+    }
+    
+    lua_settop(L, 1);
+    luaL_pushresult(&b);
+    lua_call(L, 1, 0);
+    return 0;
+}
+
 
 static int pack_fixed32(lua_State *L, uint8_t* value){
 #ifdef IS_LITTLE_ENDIAN
@@ -158,43 +198,53 @@ static int pack_fixed64(lua_State *L, uint8_t* value){
 static int struct_pack(lua_State *L)
 {
     uint8_t format = luaL_checkinteger(L, 2);
-    lua_Number value = luaL_checknumber(L, 3);
-    lua_settop(L, 1);
 
     switch(format){
         case 'i':
             {
+                lua_Number value = luaL_checknumber(L, 3);
+                lua_settop(L, 1);
                 int32_t v = (int32_t)value;
                 pack_fixed32(L, (uint8_t*)&v);
                 break;
             }
         case 'q':
             {
-                int64_t v = (int64_t)value;
+                const char* value = luaL_checkstring(L, 3);
+                lua_settop(L, 1);
+                int64_t v = atoll(value);
                 pack_fixed64(L, (uint8_t*)&v);
                 break;
             }
         case 'f':
             {
+                lua_Number value = luaL_checknumber(L, 3);
+                lua_settop(L, 1);
                 float v = (float)value;
                 pack_fixed32(L, (uint8_t*)&v);
                 break;
             }
         case 'd':
             {
+                lua_Number value = luaL_checknumber(L, 3);
+                lua_settop(L, 1);
                 double v = (double)value;
                 pack_fixed64(L, (uint8_t*)&v);
                 break;
             }
         case 'I':
             {
+                lua_Number value = luaL_checknumber(L, 3);
+                lua_settop(L, 1);
                 uint32_t v = (uint32_t)value;
                 pack_fixed32(L, (uint8_t*)&v);
                 break;
             }
         case 'Q':
             {
-                uint64_t v = (uint64_t) value;
+                const char* value = luaL_checkstring(L, 3);
+                lua_settop(L, 1);
+                uint64_t v = atoll(value);
                 pack_fixed64(L, (uint8_t*)&v);
                 break;
             }
@@ -247,6 +297,26 @@ static int varint_decoder(lua_State *L)
     return 2;
 }
 
+static int varint_decoder64(lua_State *L)
+{
+    size_t len;
+    const char* buffer = luaL_checklstring(L, 1, &len);
+    size_t pos = luaL_checkinteger(L, 2);
+    
+    buffer += pos;
+    len = size_varint(buffer, len);
+    if(len == -1){
+        luaL_error(L, "error data %s, len:%d", buffer, len);
+    }else{
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%" PRIu64, unpack_varint(buffer, len));
+        lua_pushstring(L, buf);
+        lua_pushinteger(L, len + pos);
+    }
+    return 2;
+}
+
+
 static int signed_varint_decoder(lua_State *L)
 {
     size_t len;
@@ -263,6 +333,26 @@ static int signed_varint_decoder(lua_State *L)
     }
     return 2;
 }
+
+static int signed_varint_decoder64(lua_State *L)
+{
+    size_t len;
+    const char* buffer = luaL_checklstring(L, 1, &len);
+    size_t pos = luaL_checkinteger(L, 2);
+    buffer += pos;
+    len = size_varint(buffer, len);
+    
+    if(len == -1){
+        luaL_error(L, "error data %s, len:%d", buffer, len);
+    }else{
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%" PRId64, (int64_t)unpack_varint(buffer, len));
+        lua_pushstring(L, buf);
+        lua_pushinteger(L, len + pos);
+    }
+    return 2;
+}
+
 
 static int zig_zag_encode32(lua_State *L)
 {
@@ -282,17 +372,23 @@ static int zig_zag_decode32(lua_State *L)
 
 static int zig_zag_encode64(lua_State *L)
 {
-    int64_t n = (int64_t)luaL_checknumber(L, 1);
+    const char* l_value = luaL_checkstring(L, 1);
+    int64_t n = atoll(l_value);
     uint64_t value = (n << 1) ^ (n >> 63);
-    lua_pushinteger(L, value);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%" PRIu64, value);
+    lua_pushstring(L, buf);
     return 1;
 }
 
 static int zig_zag_decode64(lua_State *L)
 {
-    uint64_t n = (uint64_t)luaL_checknumber(L, 1);
+    const char* l_value = luaL_checkstring(L, 1);
+    uint64_t n = atoll(l_value);
     int64_t value = (n >> 1) ^ - (int64_t)(n & 1);
-    lua_pushinteger(L, value);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%" PRIu64, value);
+    lua_pushstring(L, buf);
     return 1;
 }
 
@@ -350,7 +446,9 @@ static int struct_unpack(lua_State *L)
             }
         case 'q':
             {
-                lua_pushnumber(L, (lua_Number)*(int64_t*)unpack_fixed64(buffer, out));
+                char buf[64];
+                snprintf(buf, sizeof(buf), "%" PRId64, *((int64_t*)unpack_fixed64(buffer, out)));
+                lua_pushstring(L, buf);
                 break;
             }
         case 'f':
@@ -370,7 +468,9 @@ static int struct_unpack(lua_State *L)
             }
         case 'Q':
             {
-                lua_pushnumber(L, (lua_Number)*(uint64_t*)unpack_fixed64(buffer, out));
+                char buf[64];
+                snprintf(buf, sizeof(buf), "%" PRIu64, *((uint64_t*)unpack_fixed64(buffer, out)));
+                lua_pushstring(L, buf);
                 break;
             }
         default:
@@ -440,11 +540,15 @@ static int iostring_clear(lua_State* L)
 static const struct luaL_reg _pb [] = {
     {"varint_encoder", varint_encoder},
     {"signed_varint_encoder", signed_varint_encoder},
+    {"varint_encoder64", varint_encoder64},
+    {"signed_varint_encoder64", signed_varint_encoder64},
     {"read_tag", read_tag},
     {"struct_pack", struct_pack},
     {"struct_unpack", struct_unpack},
     {"varint_decoder", varint_decoder},
+    {"varint_decoder64", varint_decoder64},
     {"signed_varint_decoder", signed_varint_decoder},
+    {"signed_varint_decoder64", signed_varint_decoder64},
     {"zig_zag_decode32", zig_zag_decode32},
     {"zig_zag_encode32", zig_zag_encode32},
     {"zig_zag_decode64", zig_zag_decode64},
